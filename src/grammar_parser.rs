@@ -2,31 +2,57 @@ use super::grammar::*;
 use serde::Deserialize;
 use std::{collections::HashMap, fs};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
-struct GrammarToml {
+struct GrammarToml<T> {
     start_symbol: usize,
     terminals: HashMap<String, String>,
     non_terminals: HashMap<String, String>,
-    productions: HashMap<String, ProductionToml>,
+    productions: HashMap<String, T>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(unused)]
-struct ProductionToml {
-    lhs: Vec<usize>,
-    rhs: Vec<usize>,
+pub struct ProductionToml {
+    pub lhs: Vec<usize>,
+    pub rhs: Vec<usize>,
 }
 
-pub fn parse_grammar_from_toml_file(path: &str) -> Result<Grammar, &'static str> {
+#[derive(Deserialize, Debug)]
+#[allow(unused)]
+pub struct FreeProductionToml {
+    pub lhs: usize,
+    pub rhs: Vec<usize>,
+}
+
+// Optional trait for semantic grouping (not used by Serde)
+trait GrammarProductionToml {}
+impl GrammarProductionToml for ProductionToml {}
+impl GrammarProductionToml for FreeProductionToml {}
+
+fn read_grammar_toml<T>(path: &str) -> Result<GrammarToml<T>, &'static str>
+where
+    T: for<'de> Deserialize<'de>, // less restrictive than 'static
+{
     let toml_str = fs::read_to_string(path).map_err(|_| "Unable to read file")?;
-    let grammar_toml: GrammarToml = toml::from_str(&toml_str).map_err(|e| {
+
+    toml::from_str::<GrammarToml<T>>(&toml_str).map_err(|e| {
         println!("{:#?}", e);
         "TOML deserialization failed"
-    })?;
+    })
+}
 
-    let mut grammar = Grammar::new();
+pub fn construct_grammar<T>(path: &str) -> Result<Grammar<T>, &'static str>
+where
+    T: GrammarProduction,
+    T: FromToml<T::TomlType> + std::fmt::Display,
+    T::TomlType: std::fmt::Debug,
+{
+    let grammar_toml: GrammarToml<T::TomlType> =
+        read_grammar_toml(path).map_err(|_| "Failed to read grammar from TOML file")?;
 
+    // println!("{:#?}", grammar_toml);
+    let mut grammar: Grammar<T> = Grammar::new();
     // Add terminals
     for (id, content) in grammar_toml.terminals {
         let parsed_id: usize = id.parse().map_err(|_| "Invalid terminal ID")?;
@@ -44,7 +70,9 @@ pub fn parse_grammar_from_toml_file(path: &str) -> Result<Grammar, &'static str>
     // Add productions
     for (id, prod_toml) in grammar_toml.productions {
         let parsed_id: usize = id.parse().map_err(|_| "Invalid terminal ID")?;
-        let production = Production::new(parsed_id, prod_toml.lhs, prod_toml.rhs);
+        let production = T::from_toml(parsed_id, prod_toml);
+
+        // println!("{:}", production);
         grammar.add_production_strict(production)?;
     }
 

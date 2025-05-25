@@ -1,9 +1,13 @@
 mod grammar;
 mod grammar_parser;
-use grammar_parser::parse_grammar_from_toml_file;
+mod ll1;
+mod lr0;
+use grammar::{Grammar, Production};
+use grammar_parser::construct_grammar;
 
 fn main() {
-    let grammar = parse_grammar_from_toml_file("grammar.toml")
-        .expect("Failed to parse grammar from TOML file");
+    let grammar: Grammar<Production> =
+        construct_grammar("grammar.toml").expect("Failed to parse grammar from TOML file");
+
     println!("{:}", grammar);
 }

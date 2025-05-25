@@ -1,16 +1,22 @@
 #![allow(unused)]
-
-use serde::Deserialize;
+use super::grammar_parser::{FreeProductionToml, ProductionToml};
+use serde::{Deserialize, de::DeserializeOwned};
 use std::{collections::HashMap, fmt::Display};
 
-#[derive(Deserialize)]
-pub struct Grammar {
-    tokens: HashMap<usize, Token>,
-    start_symbol: Option<usize>,
-    productions: HashMap<usize, Production>,
+#[derive(Deserialize, Debug)]
+pub struct Grammar<T>
+where
+    T: GrammarProduction,
+{
+    pub tokens: HashMap<usize, Token>,
+    pub start_symbol: Option<usize>,
+    pub productions: HashMap<usize, T>,
 }
 
-impl Display for Grammar {
+impl<T> Display for Grammar<T>
+where
+    T: GrammarProduction,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(start_symbol) = self.start_symbol {
             if let Some(token) = self.tokens.get(&start_symbol) {
@@ -18,32 +24,12 @@ impl Display for Grammar {
             }
         }
 
-        let mut sorted_map: Vec<(&usize, &Production)> = self.productions.iter().collect(); // Vec<&i32>
-        sorted_map.sort_by_key(|&(id, _)| *id);
+        let mut sorted_productions: Vec<(&usize, &T)> = self.productions.iter().collect();
+        sorted_productions.sort_by_key(|&(id, _)| *id);
 
-        for (id, prod) in sorted_map.iter() {
-            let driver: String = prod
-                .driver
-                .iter()
-                .map(|token_id| self.tokens.get(token_id).unwrap().content.clone())
-                .fold(String::new(), |mut acc, content| {
-                    acc.push_str(&content);
-                    acc
-                });
-
-            let mut body = prod
-                .body
-                .iter()
-                .map(|token_id| self.tokens.get(token_id).unwrap().content.clone())
-                .fold(String::new(), |mut acc, content| {
-                    acc.push_str(&content);
-                    acc
-                });
-
-            if body.is_empty() {
-                body.push_str("ε");
-            }
-
+        for (id, prod) in sorted_productions.iter() {
+            let driver = self.get_production_driver(id).unwrap_or("Err".to_string());
+            let body = self.get_production_body(id).unwrap_or("Err".to_string());
             writeln!(f, "P{}: {} -> {}", id, driver, body)?;
         }
 
@@ -51,7 +37,10 @@ impl Display for Grammar {
     }
 }
 
-impl Grammar {
+impl<T> Grammar<T>
+where
+    T: GrammarProduction,
+{
     pub fn new() -> Self {
         Grammar {
             start_symbol: None,
@@ -87,56 +76,104 @@ impl Grammar {
         }
     }
 
-    /// Checks whether each of the tokens inside the body and driver in the vocabulary. Returns
-    /// error otherwise
-    pub fn add_production_strict(&mut self, production: Production) -> Result<(), &'static str> {
-        for token_id in production.driver.iter() {
-            if !self.tokens.contains_key(&token_id) {
-                return Err("Token not found in vocabulary");
-            }
-        }
-        for token_id in production.body.iter() {
-            if !self.tokens.contains_key(&token_id) {
-                return Err("Token not found in vocabulary");
-            }
-        }
+    pub fn get_token(&self, id: &usize) -> Option<&Token> {
+        self.tokens.get(id)
+    }
 
-        self.productions.insert(production.id, production);
-        Ok(())
+    pub fn get_production_body(&self, id: &usize) -> Option<String> {
+        match self.productions.get(id) {
+            Some(prod) => {
+                let mut rv = String::new();
+                // println!("ids: {:?}", prod.normalized_body());
+                // println!("map: {:#?}", self.tokens);
+                for token_id in prod.normalized_body().iter() {
+                    match self.get_token(token_id) {
+                        Some(token) => {
+                            // println!("TTTTT: {}, {}", token.id, token.content);
+                            rv.push_str(token.content.as_str())
+                        }
+                        None => return None,
+                    }
+                }
+                Some(rv)
+            }
+            None => None,
+        }
+    }
+
+    pub fn get_production_driver(&self, id: &usize) -> Option<String> {
+        match self.productions.get(id) {
+            Some(prod) => {
+                let mut err = false;
+                let rv =
+                    prod.normalized_driver()
+                        .iter()
+                        .fold("".to_string(), |mut acc, token_id| {
+                            match self.get_token(token_id) {
+                                Some(token) => {
+                                    acc.push_str(token.content.as_str());
+                                }
+                                None => err = true,
+                            };
+
+                            acc
+                        });
+                if err { None } else { Some(rv) }
+            }
+            None => None,
+        }
     }
 
     /// Adds the specified production. If any of the symbol involved in the productiondo not exist
     /// it creates a fresh one, assuming the driver contains only non terminals and the body only
     /// terminals
-    pub fn add_production(&mut self, production: Production) {
-        for token_id in production.driver.iter() {
+    pub fn add_production(&mut self, production: T) {
+        for token_id in production.normalized_driver().iter() {
             if !self.tokens.contains_key(&token_id) {
                 let new_token = Token::new_non_terminal(*token_id, &format!("NT{}", token_id));
                 self.tokens.insert(*token_id, new_token);
             }
         }
-        for token_id in production.body.iter() {
+        for token_id in production.normalized_body().iter() {
             if !self.tokens.contains_key(&token_id) {
                 let new_token = Token::new_terminal(*token_id, &format!("NT{}", token_id));
                 self.tokens.insert(*token_id, new_token);
             }
         }
 
-        self.productions.insert(production.id, production);
+        self.productions.insert(production.id(), production);
+    }
+
+    /// Checks whether each of the tokens inside the body and driver in the vocabulary. Returns
+    /// error otherwise
+    pub fn add_production_strict(&mut self, production: T) -> Result<(), &'static str> {
+        for token_id in production.normalized_driver().iter() {
+            if !self.tokens.contains_key(&token_id) {
+                return Err("Token not found in vocabulary");
+            }
+        }
+        for token_id in production.normalized_body().iter() {
+            if !self.tokens.contains_key(&token_id) {
+                return Err("Token not found in vocabulary");
+            }
+        }
+
+        self.productions.insert(production.id(), production);
+        Ok(())
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub enum TokenType {
     Terminal,
     NonTerminal,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Token {
-    id: usize,
-    content: String,
-    token_type: TokenType,
+    pub id: usize,
+    pub content: String,
+    pub token_type: TokenType,
 }
 
 impl Token {
@@ -173,15 +210,135 @@ impl Token {
     }
 }
 
-#[derive(Deserialize)]
+pub trait GrammarProduction
+where
+    Self::TomlType: DeserializeOwned,
+{
+    type TomlType;
+
+    fn normalized_driver<'a>(&'a self) -> &'a Vec<usize>;
+    fn normalized_body<'a>(&'a self) -> &'a Vec<usize>;
+    fn id(&self) -> usize;
+}
+
+pub trait FromToml<T>
+where
+    T: DeserializeOwned,
+{
+    fn from_toml(id: usize, toml: T) -> Self;
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Production {
-    id: usize,
-    driver: Vec<usize>,
-    body: Vec<usize>,
+    pub id: usize,
+    pub driver: Vec<usize>,
+    pub body: Vec<usize>,
 }
 
 impl Production {
     pub fn new(id: usize, driver: Vec<usize>, body: Vec<usize>) -> Self {
         Production { id, driver, body }
+    }
+}
+
+impl GrammarProduction for Production {
+    type TomlType = ProductionToml;
+
+    fn normalized_driver<'a>(&'a self) -> &'a Vec<usize> {
+        &self.driver
+    }
+
+    fn normalized_body<'a>(&'a self) -> &'a Vec<usize> {
+        &self.body
+    }
+
+    fn id(&self) -> usize {
+        self.id
+    }
+}
+
+impl FromToml<ProductionToml> for Production {
+    fn from_toml(id: usize, toml: ProductionToml) -> Self {
+        Production {
+            id,
+            driver: toml.lhs,
+            body: toml.rhs,
+        }
+    }
+}
+
+impl Display for Production {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let driver = self.driver.iter().fold("".to_string(), |mut acc, id| {
+            acc.push_str(id.to_string().as_str());
+            acc
+        });
+
+        let body = self.body.iter().fold("".to_string(), |mut acc, id| {
+            acc.push_str(id.to_string().as_str());
+            acc
+        });
+
+        write!(f, "{} -> {}", driver, body)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FreeProduction {
+    pub id: usize,
+    pub driver: usize,
+    pub body: Vec<usize>,
+
+    normalized_driver: Vec<usize>,
+}
+
+impl FreeProduction {
+    pub fn new(id: usize, driver: usize, body: Vec<usize>) -> Self {
+        FreeProduction {
+            id,
+            driver,
+            body,
+            normalized_driver: vec![driver],
+        }
+    }
+}
+
+impl GrammarProduction for FreeProduction {
+    type TomlType = FreeProductionToml;
+
+    fn normalized_driver<'a>(&'a self) -> &'a Vec<usize> {
+        &self.normalized_driver
+    }
+
+    fn normalized_body<'a>(&'a self) -> &'a Vec<usize> {
+        &self.body
+    }
+
+    fn id(&self) -> usize {
+        self.id
+    }
+}
+
+impl FromToml<FreeProductionToml> for FreeProduction {
+    fn from_toml(id: usize, toml: FreeProductionToml) -> Self {
+        FreeProduction {
+            id,
+            driver: toml.lhs,
+            body: toml.rhs,
+            normalized_driver: vec![toml.lhs],
+        }
+    }
+}
+
+impl Display for FreeProduction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let driver = self.driver.to_string();
+
+        let body = self.body.iter().fold("".to_string(), |mut acc, id| {
+            acc.push_str(id.to_string().as_str());
+            acc
+        });
+
+        write!(f, "{} -> {}", driver, body)
     }
 }
