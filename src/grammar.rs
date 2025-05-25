@@ -3,7 +3,7 @@ use super::grammar_parser::{FreeProductionToml, ProductionToml};
 use serde::{Deserialize, de::DeserializeOwned};
 use std::{collections::HashMap, fmt::Display};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Grammar<T>
 where
     T: GrammarProduction,
@@ -29,7 +29,11 @@ where
 
         for (id, prod) in sorted_productions.iter() {
             let driver = self.get_production_driver(id).unwrap_or("Err".to_string());
-            let body = self.get_production_body(id).unwrap_or("Err".to_string());
+            let mut body = self.get_production_body(id).unwrap_or("Err".to_string());
+            if body.is_empty() {
+                body = "ε".to_string();
+            }
+
             writeln!(f, "P{}: {} -> {}", id, driver, body)?;
         }
 
@@ -163,13 +167,13 @@ where
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum TokenType {
     Terminal,
     NonTerminal,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Token {
     pub id: usize,
     pub content: String,
@@ -228,7 +232,7 @@ where
     fn from_toml(id: usize, toml: T) -> Self;
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Production {
     pub id: usize,
     pub driver: Vec<usize>,
@@ -283,7 +287,7 @@ impl Display for Production {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct FreeProduction {
     pub id: usize,
     pub driver: usize,

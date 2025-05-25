@@ -26,6 +26,7 @@ pub struct FreeProductionToml {
 }
 
 // Optional trait for semantic grouping (not used by Serde)
+#[allow(dead_code)]
 trait GrammarProductionToml {}
 impl GrammarProductionToml for ProductionToml {}
 impl GrammarProductionToml for FreeProductionToml {}

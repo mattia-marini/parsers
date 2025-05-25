@@ -16,25 +16,35 @@ pub fn first(grammar: &Grammar<FreeProduction>) -> HashMap<usize, HashSet<usize>
     first_sets
 }
 
-pub fn nullabes(grammar: &Grammar<FreeProduction>) -> HashMap<usize, bool> {
-    let mut nullable_sets: HashMap<usize, bool> = HashMap::new();
-    // let mut last_nullables = vec![];
+pub fn nullabes(grammar: &Grammar<FreeProduction>) -> HashSet<usize> {
+    let mut tmp_grammar = grammar.clone();
+    let mut nullable_set: HashSet<usize> = HashSet::new();
 
-    todo!()
-    // for prod in grammar.productions.values() {
-    //     if prod.body.is_empty() {
-    //         nullable_sets.insert(prod.driver, true);
-    //         prod.
-    //     } else {
-    //         for token in &prod.body {
-    //             nullable_sets.insert(*token, false);
-    //         }
-    //     }
-    // }
-    //
-    // for token in grammar.tokens.values() {
-    //     compute_nullable(token.id, &grammar, &mut nullable_sets);
-    // }
+    for prod in grammar.productions.values() {
+        if prod.body.is_empty() {
+            nullable_set.insert(prod.driver);
+            tmp_grammar.productions.remove(&prod.id);
+        }
+    }
 
-    // nullable_sets
+    let mut changed = true;
+
+    while changed {
+        changed = false;
+
+        for prod in tmp_grammar.productions.values_mut() {
+            prod.body
+                .retain(|token_id| nullable_set.get(token_id).is_none());
+            if prod.body.is_empty() {
+                nullable_set.insert(prod.driver);
+                changed = true;
+            }
+        }
+
+        tmp_grammar
+            .productions
+            .retain(|_, prod| !prod.body.is_empty());
+    }
+
+    nullable_set
 }
