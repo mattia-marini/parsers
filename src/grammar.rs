@@ -1,13 +1,15 @@
+use serde::Deserialize;
 use std::collections::HashMap;
 
-struct Grammar {
+#[derive(Deserialize)]
+pub struct Grammar {
     tokens: HashMap<usize, Token>,
     start_symbol: Option<usize>,
     productions: HashMap<usize, Production>,
 }
 
 impl Grammar {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Grammar {
             start_symbol: None,
             tokens: HashMap::new(),
@@ -15,7 +17,7 @@ impl Grammar {
         }
     }
 
-    fn add_terminal(&mut self, token: Token) -> Result<(), &'static str> {
+    pub fn add_terminal(&mut self, token: Token) -> Result<(), &'static str> {
         if self.tokens.contains_key(&token.id) {
             Err("Id already existing")
         } else {
@@ -24,7 +26,7 @@ impl Grammar {
         }
     }
 
-    fn add_non_terminal(&mut self, token: Token) -> Result<(), &'static str> {
+    pub fn add_non_terminal(&mut self, token: Token) -> Result<(), &'static str> {
         if self.tokens.contains_key(&token.id) {
             Err("Id already existing")
         } else {
@@ -35,7 +37,7 @@ impl Grammar {
 
     /// Checks whether each of the tokens inside the body and driver in the vocabulary. Returns
     /// error otherwise
-    fn add_production_strict(&mut self, production: Production) -> Result<(), &'static str> {
+    pub fn add_production_strict(&mut self, production: Production) -> Result<(), &'static str> {
         for token_id in production.driver.iter() {
             if !self.tokens.contains_key(&token_id) {
                 return Err("Token not found in vocabulary");
@@ -54,7 +56,7 @@ impl Grammar {
     /// Adds the specified production. If any of the symbol involved in the productiondo not exist
     /// it creates a fresh one, assuming the driver contains only non terminals and the body only
     /// terminals
-    fn add_production(&mut self, production: Production) {
+    pub fn add_production(&mut self, production: Production) {
         for token_id in production.driver.iter() {
             if !self.tokens.contains_key(&token_id) {
                 let new_token = Token::new_non_terminal(*token_id, &format!("NT{}", token_id));
@@ -72,12 +74,14 @@ impl Grammar {
     }
 }
 
-enum TokenType {
+#[derive(Deserialize)]
+pub enum TokenType {
     Terminal,
     NonTerminal,
 }
 
-struct Token {
+#[derive(Deserialize)]
+pub struct Token {
     id: usize,
     content: String,
     token_type: TokenType,
@@ -85,7 +89,7 @@ struct Token {
 
 impl Token {
     /// Creates new token based on the case of the specified char
-    fn new(id: usize, content: &str) -> Self {
+    pub fn new(id: usize, content: &str) -> Self {
         if content.chars().next().unwrap().is_uppercase() {
             Token {
                 id,
@@ -101,30 +105,31 @@ impl Token {
         }
     }
 
-    fn new_terminal(id: usize, content: &str) -> Self {
+    pub fn new_terminal(id: usize, content: &str) -> Self {
         Token {
             id,
             content: String::from(content),
             token_type: TokenType::Terminal,
         }
     }
-    fn new_non_terminal(id: usize, content: &str) -> Self {
+    pub fn new_non_terminal(id: usize, content: &str) -> Self {
         Token {
             id,
             content: String::from(content),
-            token_type: TokenType::Terminal,
+            token_type: TokenType::NonTerminal,
         }
     }
 }
 
-struct Production {
+#[derive(Deserialize)]
+pub struct Production {
     id: usize,
     driver: Vec<usize>,
     body: Vec<usize>,
 }
 
 impl Production {
-    fn new(id: usize, driver: usize, body: usize) -> Self {
+    pub fn new(id: usize, driver: Vec<usize>, body: Vec<usize>) -> Self {
         Production { id, driver, body }
     }
 }
