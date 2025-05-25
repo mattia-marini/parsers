@@ -48,5 +48,9 @@ pub fn parse_grammar_from_toml_file(path: &str) -> Result<Grammar, &'static str>
         grammar.add_production_strict(production)?;
     }
 
+    grammar
+        .set_start_symbol(grammar_toml.start_symbol)
+        .map_err(|_| "Failed to set start symbol")?;
+
     Ok(grammar)
 }

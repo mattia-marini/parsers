@@ -1,5 +1,7 @@
+#![allow(unused)]
+
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 #[derive(Deserialize)]
 pub struct Grammar {
@@ -8,12 +10,62 @@ pub struct Grammar {
     productions: HashMap<usize, Production>,
 }
 
+impl Display for Grammar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(start_symbol) = self.start_symbol {
+            if let Some(token) = self.tokens.get(&start_symbol) {
+                writeln!(f, "Starting symbol: {}", token.content)?;
+            }
+        }
+
+        let mut sorted_map: Vec<(&usize, &Production)> = self.productions.iter().collect(); // Vec<&i32>
+        sorted_map.sort_by_key(|&(id, _)| *id);
+
+        for (id, prod) in sorted_map.iter() {
+            let driver: String = prod
+                .driver
+                .iter()
+                .map(|token_id| self.tokens.get(token_id).unwrap().content.clone())
+                .fold(String::new(), |mut acc, content| {
+                    acc.push_str(&content);
+                    acc
+                });
+
+            let mut body = prod
+                .body
+                .iter()
+                .map(|token_id| self.tokens.get(token_id).unwrap().content.clone())
+                .fold(String::new(), |mut acc, content| {
+                    acc.push_str(&content);
+                    acc
+                });
+
+            if body.is_empty() {
+                body.push_str("ε");
+            }
+
+            writeln!(f, "P{}: {} -> {}", id, driver, body)?;
+        }
+
+        Ok(())
+    }
+}
+
 impl Grammar {
     pub fn new() -> Self {
         Grammar {
             start_symbol: None,
             tokens: HashMap::new(),
             productions: HashMap::new(),
+        }
+    }
+
+    pub fn set_start_symbol(&mut self, id: usize) -> Result<(), &'static str> {
+        if self.tokens.contains_key(&id) {
+            self.start_symbol = Some(id);
+            Ok(())
+        } else {
+            Err("Token not found in vocabulary")
         }
     }
 

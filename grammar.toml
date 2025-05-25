@@ -11,6 +11,6 @@ start_symbol = 4
 6 = "C"  # Changed key from 5 to 6 to avoid duplication
 
 [productions]
-1 = { lhs = [4], rhs = [1, 2] }  # Example structure: A → a b
-2 = { lhs = [5], rhs = [2, 3] }  # B → b c
+1 = { lhs = [4], rhs = [1, 4] }  # Example structure: A → a b
+2 = { lhs = [5], rhs = [2, 5] }  # B → b c
 3 = { lhs = [6], rhs = [] }      # C → e 
