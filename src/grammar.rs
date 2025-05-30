@@ -165,6 +165,38 @@ where
         self.productions.insert(production.id(), production);
         Ok(())
     }
+
+    pub fn print_production_dbg(&self, prod: usize) {
+        let body = self.get_production_body(&prod);
+        let driver = self.get_production_driver(&prod);
+        let productions = self.productions.get(&prod);
+        match (body, driver, productions) {
+            (Some(b), Some(d), Some(prod)) => println!(
+                "{:?}{} -> {:?}{}",
+                prod.normalized_driver(),
+                d,
+                prod.normalized_body(),
+                b
+            ),
+            _ => println!("Production {} not found", prod),
+        }
+    }
+
+    pub fn print_production(&self, prod: usize) {
+        let body = self.get_production_body(&prod);
+        let driver = self.get_production_driver(&prod);
+        let productions = self.productions.get(&prod);
+        match (body, driver, productions) {
+            (Some(b), Some(d), Some(prod)) => println!("{} -> {}", d, b),
+            _ => println!("Production {} not found", prod),
+        }
+    }
+
+    pub fn print_dbg(&self) {
+        for prod in self.productions.keys() {
+            self.print_production_dbg(*prod);
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
