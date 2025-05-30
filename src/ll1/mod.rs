@@ -1,7 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::grammar::{FreeProduction, Grammar, TokenType};
-use petgraph::{Graph, graph::NodeIndex, visit::EdgeRef};
+use petgraph::{
+    Graph,
+    algo::{DfsSpace, condensation, has_path_connecting, toposort},
+    graph::NodeIndex,
+    visit::EdgeRef,
+};
 
 /// 1. Compute "basic firsts"
 /// 2. Create dependencies graph. There is a node for each driver and for each productions
@@ -77,11 +82,63 @@ pub fn first(grammar: &Grammar<FreeProduction>) -> HashMap<usize, HashSet<usize>
         println!("edge {} -> {}", from, to);
     }
 
+    let condensation_graph = condensation(first_graph, true);
 
-     
+    let topological_order =
+        toposort(&condensation_graph, None).expect("Failed to compute topological order");
+
+    let mut current_firsts: HashSet<usize> = HashSet::new();
+    let mut prev_scc = topological_order.last().expect("Empty toposort");
+
+    let mut dfs_space = DfsSpace::new(&condensation_graph);
+
+    // First reachability check
+    for scc in topological_order.iter().rev() {
+        if !has_path_connecting(&condensation_graph, *scc, *prev_scc, Some(&mut dfs_space)) {
+            current_firsts.clear();
+        }
+
+        let scc_components = condensation_graph
+            .node_weight(*scc)
+            .expect("Failed to get node weight");
+
+        for node in scc_components {
+            let node_firsts = first_sets.get_mut(node).expect("Failed to get first set");
+            for first in node_firsts.iter() {
+                if !current_firsts.contains(first) {
+                    current_firsts.insert(*first);
+                }
+            }
+        }
+
+        for node in scc_components {
+            first_sets
+                .get_mut(node)
+                .expect("Failed to get first set")
+                .extend(current_firsts.iter().cloned());
+        }
+
+        prev_scc = scc;
+    }
+
+    first_sets.iter.map(|(key, value)| {
+        let token = grammar.get_token(key).expect("Failed to get token");
+        println!("First({}) = {:?}", token.content, value);
+    });
+
+    println!("First sets: {:#?}",);
+    // first_graph.add_edge(
+    //     *to_petgraph_index.get(&6).unwrap(),
+    //     *to_petgraph_index.get(&4).unwrap(),
+    //     (),
+    // );
+
+    // println!("{:#?}",);
 
     first_sets
 }
+
+fn get_condensation_graph(g: &Graph<usize, ()>) {}
 
 pub fn nullabes(grammar: &Grammar<FreeProduction>) -> HashSet<usize> {
     let mut tmp_grammar = grammar.clone();
